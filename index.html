@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Expense Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F8F9FA;
+      --card-bg: #FFFFFF;
+      --text-main: #1A1A1A;
+      --text-sub: #7A7A7A;
+      --income: #10B981;
+      --expense: #EF4444;
+      --accent: #2563EB;
+      --border: #E5E7EB;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Prompt', sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background-color: var(--bg); color: var(--text-main); padding-bottom: 90px; }
+
+    header {
+      padding: 24px 20px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg);
+    }
+    h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.5px; }
+    .settings-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-sub); }
+
+    /* Period Filter */
+    .filter-bar {
+      display: flex;
+      background: #E5E7EB;
+      margin: 8px 20px 16px;
+      padding: 4px;
+      border-radius: 12px;
+    }
+    .filter-btn {
+      flex: 1;
+      border: none;
+      background: none;
+      padding: 8px 0;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border-radius: 8px;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-btn.active { background: #FFFFFF; color: var(--text-main); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+    /* Summary Card */
+    .summary-card {
+      margin: 0 20px 20px;
+      padding: 20px;
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+      border: 1px solid var(--border);
+    }
+    .balance-label { font-size: 0.8rem; color: var(--text-sub); margin-bottom: 4px; }
+    .balance-value { font-size: 1.8rem; font-weight: 600; margin-bottom: 16px; }
+    .flow-row { display: flex; justify-content: space-between; padding-top: 12px; border-top: 1px dashed var(--border); }
+    .flow-item span { display: block; font-size: 0.75rem; color: var(--text-sub); }
+    .flow-item strong { font-size: 1rem; font-weight: 600; }
+    .flow-income strong { color: var(--income); }
+    .flow-expense strong { color: var(--expense); }
+
+    /* Transactions */
+    .section-title { margin: 0 20px 12px; font-size: 0.95rem; font-weight: 600; color: var(--text-sub); }
+    .tx-list { margin: 0 20px; display: flex; flex-direction: column; gap: 8px; }
+    .tx-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    .tx-left { display: flex; flex-direction: column; gap: 2px; }
+    .tx-title { font-size: 0.9rem; font-weight: 500; }
+    .tx-date { font-size: 0.75rem; color: var(--text-sub); }
+    .tx-right { text-align: right; }
+    .tx-amount { font-size: 0.95rem; font-weight: 600; }
+    .tx-amount.expense { color: var(--expense); }
+    .tx-amount.income { color: var(--income); }
+
+    /* Floating Action Bar */
+    .action-bar {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      gap: 12px;
+    }
+    .btn-action {
+      flex: 1;
+      padding: 14px;
+      border-radius: 14px;
+      border: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .btn-manual { background: #FFFFFF; color: var(--text-main); border: 1px solid var(--border); }
+    .btn-scan { background: var(--text-main); color: #FFFFFF; }
+
+    /* Modals */
+    .modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.4);
+      display: none;
+      align-items: flex-end;
+      z-index: 100;
+    }
+    .modal-content {
+      background: #FFFFFF;
+      width: 100%;
+      border-radius: 24px 24px 0 0;
+      padding: 24px 20px;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+    .modal-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 16px; }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.8rem; color: var(--text-sub); margin-bottom: 4px; }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: 0.95rem;
+    }
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      background: var(--text-main);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      margin-top: 12px;
+      cursor: pointer;
+    }
+    #loadingSpinner { display: none; text-align: center; padding: 20px; font-size: 0.9rem; color: var(--text-sub); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>บัญชีของฉัน</h1>
+    <button class="settings-btn" onclick="openSettings()">⚙️</button>
+  </header>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setPeriod('day', this)">วันนี้</button>
+    <button class="filter-btn" onclick="setPeriod('week', this)">สัปดาห์นี้</button>
+    <button class="filter-btn" onclick="setPeriod('month', this)">เดือนนี้</button>
+  </div>
+
+  <div class="summary-card">
+    <div class="balance-label">ยอดสุทธิคงเหลือ</div>
+    <div class="balance-value" id="netBalance">฿0.00</div>
+    <div class="flow-row">
+      <div class="flow-item flow-income">
+        <span>รายรับ</span>
+        <strong id="totalIncome">฿0.00</strong>
+      </div>
+      <div class="flow-item flow-expense">
+        <span>รายจ่าย</span>
+        <strong id="totalExpense">฿0.00</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">รายการล่าสุด</div>
+  <div class="tx-list" id="txList"></div>
+
+  <!-- Bottom Floating Buttons -->
+  <div class="action-bar">
+    <button class="btn-action btn-manual" onclick="openManualModal()">+ บันทึกมือ</button>
+    <button class="btn-action btn-scan" onclick="triggerSlipUpload()">📸 อ่านสลิป</button>
+    <input type="file" id="slipInput" accept="image/*" style="display:none;" onchange="handleSlipUpload(event)">
+  </div>
+
+  <!-- Modal: Manual Entry / Slip Result -->
+  <div class="modal" id="entryModal">
+    <div class="modal-content">
+      <div class="modal-title" id="modalHeading">บันทึกรายการ</div>
+      <div class="form-group">
+        <label>ประเภท</label>
+        <select id="txType">
+          <option value="expense">รายจ่าย</option>
+          <option value="income">รายรับ</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>ยอดเงิน (บาท)</label>
+        <input type="number" id="txAmount" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>หมวดหมู่</label>
+        <select id="txCategory">
+          <option value="อาหาร">อาหาร / เครื่องดื่ม</option>
+          <option value="เดินทาง">เดินทาง / น้ำมัน</option>
+          <option value="ช้อปปิ้ง">ช้อปปิ้ง / ซื้อของ</option>
+          <option value="บิล/ค่าใช้จ่าย">บิล / ค่าน้ำ ค่าไฟ</option>
+          <option value="เงินเดือน">เงินเดือน / รายได้</option>
+          <option value="อื่นๆ">อื่นๆ</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>บันทึกช่วยจำ (Note)</label>
+        <input type="text" id="txNote" placeholder="เช่น กาแฟอเมซอน, โอนให้เพื่อน">
+      </div>
+      <div class="form-group">
+        <label>วันที่และเวลา</label>
+        <input type="datetime-local" id="txDate">
+      </div>
+      <button class="btn-submit" onclick="saveTransaction()">บันทึกรายการ</button>
+      <button class="btn-submit" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('entryModal')">ยกเลิก</button>
+    </div>
+  </div>
+
+  <!-- Modal: Settings (Gemini API Key) -->
+  <div class="modal" id="settingsModal">
+    <div class="modal-content">
+      <div class="modal-title">ตั้งค่า Gemini API Key</div>
+      <p style="font-size:0.8rem; color:var(--text-sub); margin-bottom:12px;">
+        รับ API Key ฟรีได้จาก <a href="https://aistudio.google.com/" target="_blank" style="color:var(--accent);">Google AI Studio</a> ข้อมูลจะถูกเก็บในเครื่องคุณเท่านั้น
+      </p>
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="password" id="apiKeyInput" placeholder="AIzaSy...">
+      </div>
+      <button class="btn-submit" onclick="saveApiKey()">บันทึก Key</button>
+      <button class="btn-submit" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('settingsModal')">ปิด</button>
+    </div>
+  </div>
+
+  <!-- Loading State Indicator -->
+  <div class="modal" id="loadingModal">
+    <div class="modal-content" style="text-align:center; padding: 40px 20px;">
+      <div style="font-size: 2rem; margin-bottom: 12px;">⏳</div>
+      <div style="font-weight: 500;">AI กำลังอ่านข้อมูลจากสลิป...</div>
+    </div>
+  </div>
+
+  <script>
+    let transactions = JSON.parse(localStorage.getItem('my_transactions') || '[]');
+    let currentPeriod = 'day';
+
+    function init() {
+      render();
+    }
+
+    function setPeriod(period, btn) {
+      currentPeriod = period;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      render();
+    }
+
+    function render() {
+      const now = new Date();
+      const filtered = transactions.filter(t => {
+        const d = new Date(t.date);
+        if (currentPeriod === 'day') {
+          return d.toDateString() === now.toDateString();
+        } else if (currentPeriod === 'week') {
+          const diffTime = Math.abs(now - d);
+          return diffTime <= (7 * 24 * 60 * 60 * 1000);
+        } else if (currentPeriod === 'month') {
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        }
+        return true;
+      });
+
+      let inc = 0, exp = 0;
+      filtered.forEach(t => {
+        if (t.type === 'income') inc += t.amount;
+        else exp += t.amount;
+      });
+
+      document.getElementById('netBalance').innerText = '฿' + (inc - exp).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+      document.getElementById('totalIncome').innerText = '฿' + inc.toLocaleString('th-TH', { minimumFractionDigits: 2 });
+      document.getElementById('totalExpense').innerText = '฿' + exp.toLocaleString('th-TH', { minimumFractionDigits: 2 });
+
+      const listEl = document.getElementById('txList');
+      listEl.innerHTML = '';
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<div style="text-align:center; color:var(--text-sub); padding:30px 0; font-size:0.85rem;">ยังไม่มีรายการในช่วงนี้</div>';
+        return;
+      }
+
+      filtered.sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(t => {
+        const item = document.createElement('div');
+        item.className = 'tx-item';
+        const formattedDate = new Date(t.date).toLocaleDateString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        item.innerHTML = `
+          <div class="tx-left">
+            <span class="tx-title">${t.category} ${t.note ? '· ' + t.note : ''}</span>
+            <span class="tx-date">${formattedDate}</span>
+          </div>
+          <div class="tx-right">
+            <span class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '-'}฿${t.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+          </div>
+        `;
+        listEl.appendChild(item);
+      });
+    }
+
+    function openManualModal() {
+      document.getElementById('modalHeading').innerText = 'บันทึกรายการ';
+      document.getElementById('txType').value = 'expense';
+      document.getElementById('txAmount').value = '';
+      document.getElementById('txNote').value = '';
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('txDate').value = now.toISOString().slice(0,16);
+      document.getElementById('entryModal').style.display = 'flex';
+    }
+
+    function saveTransaction() {
+      const amount = parseFloat(document.getElementById('txAmount').value);
+      if (isNaN(amount) || amount <= 0) return alert('กรุณาระบุจำนวนเงินให้ถูกต้อง');
+
+      const newTx = {
+        id: Date.now(),
+        type: document.getElementById('txType').value,
+        amount: amount,
+        category: document.getElementById('txCategory').value,
+        note: document.getElementById('txNote').value.trim(),
+        date: document.getElementById('txDate').value || new Date().toISOString()
+      };
+
+      transactions.unshift(newTx);
+      localStorage.setItem('my_transactions', JSON.stringify(transactions));
+      closeModal('entryModal');
+      render();
+    }
+
+    function triggerSlipUpload() {
+      const apiKey = localStorage.getItem('gemini_api_key');
+      if (!apiKey) {
+        alert('กรุณากดที่ไอคอน ⚙️ ด้านบน เพื่อใส่ Gemini API Key ก่อนใช้งานระบบอ่านสลิปครับ');
+        openSettings();
+        return;
+      }
+      document.getElementById('slipInput').click();
+    }
+
+    async function handleSlipUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      document.getElementById('loadingModal').style.display = 'flex';
+      try {
+        const base64Data = await fileToBase64(file);
+        const apiKey = localStorage.getItem('gemini_api_key');
+        
+        const prompt = `วิเคราะห์สลิปโอนเงินนี้ และตอบกลับเฉพาะ JSON รูปแบบนี้เท่านั้น:
+        {"amount": ตัวเลขยอดเงิน, "type": "expense" หรือ "income", "category": "อาหาร/เดินทาง/ช้อปปิ้ง/บิล/ค่าใช้จ่าย/อื่นๆ", "note": "ชื่อผู้รับหรือข้อความในสลิป", "datetime": "YYYY-MM-DDTHH:mm"}`;
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: prompt },
+                { inlineData: { mimeType: file.type, data: base64Data } }
+              ]
+            }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        const data = await res.json();
+        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+
+        // Autofill to Modal
+        document.getElementById('modalHeading').innerText = 'ตรวจสอบข้อมูลจากสลิป';
+        document.getElementById('txType').value = parsed.type || 'expense';
+        document.getElementById('txAmount').value = parsed.amount || '';
+        document.getElementById('txCategory').value = parsed.category || 'อื่นๆ';
+        document.getElementById('txNote').value = parsed.note || '';
+        if (parsed.datetime) document.getElementById('txDate').value = parsed.datetime;
+
+        closeModal('loadingModal');
+        document.getElementById('entryModal').style.display = 'flex';
+      } catch (err) {
+        closeModal('loadingModal');
+        alert('ไม่สามารถอ่านข้อมูลจากสลิปได้ กรุณาลองใหม่อีกครั้ง');
+        console.error(err);
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function openSettings() {
+      document.getElementById('apiKeyInput').value = localStorage.getItem('gemini_api_key') || '';
+      document.getElementById('settingsModal').style.display = 'flex';
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      localStorage.setItem('gemini_api_key', key);
+      closeModal('settingsModal');
+      alert('บันทึก API Key เรียบร้อยแล้ว');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    init();
+  </script>
+</body>
+</html>
