@@ -167,9 +167,9 @@
   </header>
 
   <div class="filter-bar">
-    <button class="filter-btn active" id="btn-day" onclick="setPeriod('day', this)">วันนี้</button>
+    <button class="filter-btn" id="btn-day" onclick="setPeriod('day', this)">วันนี้</button>
     <button class="filter-btn" id="btn-week" onclick="setPeriod('week', this)">สัปดาห์นี้</button>
-    <button class="filter-btn" id="btn-month" onclick="setPeriod('month', this)">เดือนนี้</button>
+    <button class="filter-btn active" id="btn-month" onclick="setPeriod('month', this)">เดือนนี้</button>
   </div>
 
   <div class="summary-card">
@@ -231,8 +231,8 @@
         <label>วันที่และเวลา</label>
         <input type="datetime-local" id="txDate">
       </div>
-      <button class="btn-submit" onclick="saveTransaction()">บันทึกรายการ</button>
-      <button class="btn-submit" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('entryModal')">ยกเลิก</button>
+      <button class="btn-submit" type="button" onclick="saveTransaction()">บันทึกรายการ</button>
+      <button class="btn-submit" type="button" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('entryModal')">ยกเลิก</button>
     </div>
   </div>
 
@@ -247,8 +247,8 @@
         <label>API Key</label>
         <input type="password" id="apiKeyInput" placeholder="AIzaSy...">
       </div>
-      <button class="btn-submit" onclick="saveApiKey()">บันทึก Key</button>
-      <button class="btn-submit" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('settingsModal')">ปิด</button>
+      <button class="btn-submit" type="button" onclick="saveApiKey()">บันทึก Key</button>
+      <button class="btn-submit" type="button" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('settingsModal')">ปิด</button>
     </div>
   </div>
 
@@ -267,19 +267,16 @@
     } catch(e) {
       transactions = [];
     }
-    let currentPeriod = 'month'; // ตั้งต้นที่เดือนนี้ เพื่อไม่ให้รายการวันที่อื่นหลุดสายตา
+    let currentPeriod = 'month';
 
     function init() {
-      // ตั้ง active tab ไปที่เดือนนี้
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('btn-month').classList.add('active');
       render();
     }
 
     function setPeriod(period, btn) {
       currentPeriod = period;
       document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      if (btn) btn.classList.add('active');
       render();
     }
 
@@ -344,44 +341,50 @@
       document.getElementById('txType').value = 'expense';
       document.getElementById('txAmount').value = '';
       document.getElementById('txNote').value = '';
+      
       const now = new Date();
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      document.getElementById('txDate').value = now.toISOString().slice(0,16);
+      document.getElementById('txDate').value = now.toISOString().slice(0, 16);
+      
       document.getElementById('entryModal').style.display = 'flex';
     }
 
     function saveTransaction() {
-      const amtInput = document.getElementById('txAmount').value;
-      const amount = parseFloat(amtInput);
-      if (isNaN(amount) || amount <= 0) {
-        alert('กรุณากรอกยอดเงินให้ถูกต้อง');
-        return;
+      try {
+        const amtInput = document.getElementById('txAmount').value;
+        const amount = parseFloat(amtInput);
+        if (isNaN(amount) || amount <= 0) {
+          alert('กรุณาระบุจำนวนเงินให้ถูกต้อง');
+          return;
+        }
+
+        const dateVal = document.getElementById('txDate').value;
+        let finalDate = new Date().toISOString();
+        if (dateVal) {
+          const testDate = new Date(dateVal);
+          if (!isNaN(testDate.getTime())) {
+            finalDate = testDate.toISOString();
+          }
+        }
+
+        const newTx = {
+          id: Date.now(),
+          type: document.getElementById('txType').value || 'expense',
+          amount: amount,
+          category: document.getElementById('txCategory').value || 'อื่นๆ',
+          note: (document.getElementById('txNote').value || '').trim() || 'ไม่มีบันทึก',
+          date: finalDate
+        };
+
+        transactions.unshift(newTx);
+        localStorage.setItem('my_transactions', JSON.stringify(transactions));
+        
+        closeModal('entryModal');
+        setPeriod('month', document.getElementById('btn-month'));
+        alert('บันทึกเรียบร้อย: ฿' + amount.toLocaleString('th-TH'));
+      } catch (err) {
+        alert('บันทึกไม่สำเร็จ: ' + err.message);
       }
-
-      let dateVal = document.getElementById('txDate').value;
-      let finalDate;
-      if (dateVal) {
-        finalDate = new Date(dateVal).toISOString();
-      } else {
-        finalDate = new Date().toISOString();
-      }
-
-      const newTx = {
-        id: Date.now(),
-        type: document.getElementById('txType').value,
-        amount: amount,
-        category: document.getElementById('txCategory').value,
-        note: document.getElementById('txNote').value.trim() || 'ไม่มีบันทึก',
-        date: finalDate
-      };
-
-      transactions.unshift(newTx);
-      localStorage.setItem('my_transactions', JSON.stringify(transactions));
-      closeModal('entryModal');
-      
-      // สลับไปที่แท็บเดือนนี้ทันที เพื่อให้เห็นรายการชัวร์ๆ
-      setPeriod('month', document.getElementById('btn-month'));
-      alert(`บันทึกเรียบร้อย! ฿${amount.toLocaleString('th-TH')}`);
     }
 
     function deleteTransaction(id) {
@@ -434,21 +437,26 @@
 
         const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
 
-        // นำค่าที่ AI อ่านได้มาใส่ฟอร์ม
+        // นำค่าที่ได้มากรอกลงฟอร์ม
         document.getElementById('modalHeading').innerText = 'ตรวจสอบข้อมูลจากสลิป';
         document.getElementById('txType').value = parsed.type || 'expense';
         document.getElementById('txAmount').value = parsed.amount || '';
         document.getElementById('txCategory').value = parsed.category || 'อื่นๆ';
         document.getElementById('txNote').value = parsed.note || '';
 
-        // ใส่วันที่
+        // จัดการวันที่ลง input datetime-local ให้ไม่หลุด format
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        if (parsed.datetime && parsed.datetime.length >= 16) {
-          document.getElementById('txDate').value = parsed.datetime.slice(0, 16);
-        } else {
-          document.getElementById('txDate').value = now.toISOString().slice(0, 16);
+        let dateToSet = now.toISOString().slice(0, 16);
+
+        if (parsed.datetime) {
+          const testParsedDate = new Date(parsed.datetime);
+          if (!isNaN(testParsedDate.getTime())) {
+            testParsedDate.setMinutes(testParsedDate.getMinutes() - testParsedDate.getTimezoneOffset());
+            dateToSet = testParsedDate.toISOString().slice(0, 16);
+          }
         }
+        document.getElementById('txDate').value = dateToSet;
 
         closeModal('loadingModal');
         document.getElementById('entryModal').style.display = 'flex';
