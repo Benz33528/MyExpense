@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <!-- นำเข้า Tesseract.js สำหรับ OCR บนเครื่องฟรี 100% -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
       --bg: #F8F9FA;
@@ -31,7 +33,6 @@
       background: var(--bg);
     }
     h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.5px; }
-    .settings-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-sub); }
 
     /* Period Filter */
     .filter-bar {
@@ -163,7 +164,7 @@
 
   <header>
     <h1>บัญชีของฉัน</h1>
-    <button class="settings-btn" onclick="openSettings()">⚙️</button>
+    <span style="font-size: 0.8rem; color: var(--text-sub);">Offline OCR ⚡</span>
   </header>
 
   <div class="filter-bar">
@@ -193,8 +194,8 @@
   <!-- Bottom Floating Buttons -->
   <div class="action-bar">
     <button class="btn-action btn-manual" onclick="openManualModal()">+ บันทึกมือ</button>
-    <button class="btn-action btn-scan" onclick="triggerSlipUpload()">📸 อ่านสลิป</button>
-    <input type="file" id="slipInput" accept="image/*" style="display:none;" onchange="handleSlipUpload(event)">
+    <button class="btn-action btn-scan" onclick="document.getElementById('slipInput').click()">📸 สแกนสลิปฟรี</button>
+    <input type="file" id="slipInput" accept="image/*" style="display:none;" onchange="handleSlipScan(event)">
   </div>
 
   <!-- Modal: Entry / Check Slip Modal -->
@@ -236,27 +237,11 @@
     </div>
   </div>
 
-  <!-- Modal: Settings (Gemini API Key) -->
-  <div class="modal" id="settingsModal">
-    <div class="modal-content">
-      <div class="modal-title">ตั้งค่า Gemini API Key</div>
-      <p style="font-size:0.8rem; color:var(--text-sub); margin-bottom:12px;">
-        รับ API Key ฟรีได้จาก <a href="https://aistudio.google.com/" target="_blank" style="color:var(--accent);">Google AI Studio</a> ข้อมูลจะถูกเก็บในเครื่องคุณเท่านั้น
-      </p>
-      <div class="form-group">
-        <label>API Key</label>
-        <input type="password" id="apiKeyInput" placeholder="AIzaSy...">
-      </div>
-      <button class="btn-submit" type="button" onclick="saveApiKey()">บันทึก Key</button>
-      <button class="btn-submit" type="button" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('settingsModal')">ปิด</button>
-    </div>
-  </div>
-
   <!-- Loading State Indicator -->
   <div class="modal" id="loadingModal">
     <div class="modal-content" style="text-align:center; padding: 40px 20px;">
-      <div style="font-size: 2rem; margin-bottom: 12px;">⏳</div>
-      <div style="font-weight: 500;">AI กำลังอ่านข้อมูลจากสลิป...</div>
+      <div style="font-size: 2rem; margin-bottom: 12px;">🔍</div>
+      <div style="font-weight: 500;" id="loadingText">กำลังอ่านข้อความบนสลิปในเครื่อง...</div>
     </div>
   </div>
 
@@ -318,183 +303,4 @@
         item.className = 'tx-item';
         const dateObj = new Date(t.date);
         const formattedDate = !isNaN(dateObj.getTime())
-          ? dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-          : 'วันที่ไม่ระบุ';
-
-        const amt = Number(t.amount) || 0;
-        item.innerHTML = `
-          <div class="tx-left">
-            <span class="tx-title">${t.category || 'ทั่วไป'} ${t.note ? '· ' + t.note : ''}</span>
-            <span class="tx-date">${formattedDate}</span>
-          </div>
-          <div class="tx-right">
-            <span class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '-'}฿${amt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
-            <button class="btn-delete" onclick="deleteTransaction(${t.id})">🗑️</button>
-          </div>
-        `;
-        listEl.appendChild(item);
-      });
-    }
-
-    function openManualModal() {
-      document.getElementById('modalHeading').innerText = 'บันทึกรายการ';
-      document.getElementById('txType').value = 'expense';
-      document.getElementById('txAmount').value = '';
-      document.getElementById('txNote').value = '';
-      
-      const now = new Date();
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-      document.getElementById('txDate').value = now.toISOString().slice(0, 16);
-      
-      document.getElementById('entryModal').style.display = 'flex';
-    }
-
-    function saveTransaction() {
-      try {
-        const amtInput = document.getElementById('txAmount').value;
-        const amount = parseFloat(amtInput);
-        if (isNaN(amount) || amount <= 0) {
-          alert('กรุณาระบุจำนวนเงินให้ถูกต้อง');
-          return;
-        }
-
-        const dateVal = document.getElementById('txDate').value;
-        let finalDate = new Date().toISOString();
-        if (dateVal) {
-          const testDate = new Date(dateVal);
-          if (!isNaN(testDate.getTime())) {
-            finalDate = testDate.toISOString();
-          }
-        }
-
-        const newTx = {
-          id: Date.now(),
-          type: document.getElementById('txType').value || 'expense',
-          amount: amount,
-          category: document.getElementById('txCategory').value || 'อื่นๆ',
-          note: (document.getElementById('txNote').value || '').trim() || 'ไม่มีบันทึก',
-          date: finalDate
-        };
-
-        transactions.unshift(newTx);
-        localStorage.setItem('my_transactions', JSON.stringify(transactions));
-        
-        closeModal('entryModal');
-        setPeriod('month', document.getElementById('btn-month'));
-        alert('บันทึกเรียบร้อย: ฿' + amount.toLocaleString('th-TH'));
-      } catch (err) {
-        alert('บันทึกไม่สำเร็จ: ' + err.message);
-      }
-    }
-
-    function deleteTransaction(id) {
-      if (!confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) return;
-      transactions = transactions.filter(t => t.id !== id);
-      localStorage.setItem('my_transactions', JSON.stringify(transactions));
-      render();
-    }
-
-    function triggerSlipUpload() {
-      const apiKey = localStorage.getItem('gemini_api_key');
-      if (!apiKey) {
-        alert('กรุณากดที่ไอคอน ⚙️ ด้านบน เพื่อใส่ Gemini API Key ก่อนใช้งานระบบอ่านสลิปครับ');
-        openSettings();
-        return;
-      }
-      document.getElementById('slipInput').click();
-    }
-
-    async function handleSlipUpload(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      document.getElementById('loadingModal').style.display = 'flex';
-      try {
-        const base64Data = await fileToBase64(file);
-        const apiKey = localStorage.getItem('gemini_api_key');
-        
-        const prompt = `วิเคราะห์สลิปโอนเงินนี้ และตอบกลับเฉพาะ JSON รูปแบบนี้เท่านั้น:
-        {"amount": ตัวเลขยอดเงิน, "type": "expense", "category": "อาหาร/เดินทาง/ช้อปปิ้ง/บิล/ค่าใช้จ่าย/เงินเดือน/อื่นๆ", "note": "ชื่อผู้รับหรือข้อความในสลิป", "datetime": "YYYY-MM-DDTHH:mm"}`;
-
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                { text: prompt },
-                { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } }
-              ]
-            }],
-            generationConfig: { responseMimeType: "application/json" }
-          })
-        });
-
-        const data = await res.json();
-        if (data.error) {
-          throw new Error(data.error.message || 'API Error');
-        }
-
-        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
-
-        // นำค่าที่ได้มากรอกลงฟอร์ม
-        document.getElementById('modalHeading').innerText = 'ตรวจสอบข้อมูลจากสลิป';
-        document.getElementById('txType').value = parsed.type || 'expense';
-        document.getElementById('txAmount').value = parsed.amount || '';
-        document.getElementById('txCategory').value = parsed.category || 'อื่นๆ';
-        document.getElementById('txNote').value = parsed.note || '';
-
-        // จัดการวันที่ลง input datetime-local ให้ไม่หลุด format
-        const now = new Date();
-        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-        let dateToSet = now.toISOString().slice(0, 16);
-
-        if (parsed.datetime) {
-          const testParsedDate = new Date(parsed.datetime);
-          if (!isNaN(testParsedDate.getTime())) {
-            testParsedDate.setMinutes(testParsedDate.getMinutes() - testParsedDate.getTimezoneOffset());
-            dateToSet = testParsedDate.toISOString().slice(0, 16);
-          }
-        }
-        document.getElementById('txDate').value = dateToSet;
-
-        closeModal('loadingModal');
-        document.getElementById('entryModal').style.display = 'flex';
-      } catch (err) {
-        closeModal('loadingModal');
-        alert('เกิดข้อผิดพลาด: ' + (err.message || 'ไม่สามารถอ่านสลิปได้'));
-        console.error(err);
-      } finally {
-        e.target.value = '';
-      }
-    }
-
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    function openSettings() {
-      document.getElementById('apiKeyInput').value = localStorage.getItem('gemini_api_key') || '';
-      document.getElementById('settingsModal').style.display = 'flex';
-    }
-
-    function saveApiKey() {
-      const key = document.getElementById('apiKeyInput').value.trim();
-      localStorage.setItem('gemini_api_key', key);
-      closeModal('settingsModal');
-      alert('บันทึก API Key เรียบร้อยแล้ว');
-    }
-
-    function closeModal(id) {
-      document.getElementById(id).style.display = 'none';
-    }
-
-    init();
-  </script>
-</body>
-</html>
+          ? dateObj.toLocaleDateString('th
