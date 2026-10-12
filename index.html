@@ -7,8 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <!-- นำเข้า Tesseract.js สำหรับ OCR บนเครื่องฟรี 100% -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <style>
     :root {
       --bg: #F8F9FA;
@@ -33,6 +31,7 @@
       background: var(--bg);
     }
     h1 { font-size: 1.3rem; font-weight: 600; letter-spacing: -0.5px; }
+    .settings-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; }
 
     /* Period Filter */
     .filter-bar {
@@ -92,7 +91,7 @@
     .tx-amount { font-size: 0.95rem; font-weight: 600; }
     .tx-amount.expense { color: var(--expense); }
     .tx-amount.income { color: var(--income); }
-    .btn-delete { background: none; border: none; font-size: 0.9rem; color: #9CA3AF; cursor: pointer; padding: 4px; }
+    .btn-delete { background: none; border: none; font-size: 1rem; color: #9CA3AF; cursor: pointer; padding: 4px; }
 
     /* Floating Action Bar */
     .action-bar {
@@ -124,7 +123,7 @@
     .modal {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.4);
+      background: rgba(0,0,0,0.5);
       display: none;
       align-items: flex-end;
       z-index: 100;
@@ -164,7 +163,7 @@
 
   <header>
     <h1>บัญชีของฉัน</h1>
-    <span style="font-size: 0.8rem; color: var(--text-sub);">Offline OCR ⚡</span>
+    <button class="settings-btn" onclick="openSettings()">⚙️</button>
   </header>
 
   <div class="filter-bar">
@@ -194,14 +193,14 @@
   <!-- Bottom Floating Buttons -->
   <div class="action-bar">
     <button class="btn-action btn-manual" onclick="openManualModal()">+ บันทึกมือ</button>
-    <button class="btn-action btn-scan" onclick="document.getElementById('slipInput').click()">📸 สแกนสลิปฟรี</button>
-    <input type="file" id="slipInput" accept="image/*" style="display:none;" onchange="handleSlipScan(event)">
+    <button class="btn-action btn-scan" onclick="triggerSlipUpload()">📸 สแกนสลิป (500/วัน)</button>
+    <input type="file" id="slipInput" accept="image/*" style="display:none;" onchange="handleOCRSpaceUpload(event)">
   </div>
 
   <!-- Modal: Entry / Check Slip Modal -->
   <div class="modal" id="entryModal">
     <div class="modal-content">
-      <div class="modal-title" id="modalHeading">บันทึกรายการ</div>
+      <div class="modal-title" id="modalHeading">ตรวจสอบข้อมูลสลิป</div>
       <div class="form-group">
         <label>ประเภท</label>
         <select id="txType">
@@ -226,7 +225,7 @@
       </div>
       <div class="form-group">
         <label>บันทึกช่วยจำ (Note)</label>
-        <input type="text" id="txNote" placeholder="เช่น กาแฟอเมซอน, โอนให้เพื่อน">
+        <input type="text" id="txNote" placeholder="เช่น กาแฟอเมซอน, ค่าอาหาร">
       </div>
       <div class="form-group">
         <label>วันที่และเวลา</label>
@@ -237,11 +236,27 @@
     </div>
   </div>
 
+  <!-- Modal: Settings (OCR.Space API Key) -->
+  <div class="modal" id="settingsModal">
+    <div class="modal-content">
+      <div class="modal-title">ตั้งค่า OCR.Space API Key</div>
+      <p style="font-size:0.8rem; color:var(--text-sub); margin-bottom:12px;">
+        ฟรี 500 สลิป/วัน รับ Key ฟรีทันทีที่ <a href="https://ocr.space/ocrapi/freekey" target="_blank" style="color:var(--accent);">ocr.space/ocrapi/freekey</a>
+      </p>
+      <div class="form-group">
+        <label>API Key</label>
+        <input type="text" id="apiKeyInput" placeholder="ใส่ Free API Key ที่ได้จากอีเมล">
+      </div>
+      <button class="btn-submit" type="button" onclick="saveApiKey()">บันทึก Key</button>
+      <button class="btn-submit" type="button" style="background:#E5E7EB; color:#333; margin-top:8px;" onclick="closeModal('settingsModal')">ปิด</button>
+    </div>
+  </div>
+
   <!-- Loading State Indicator -->
   <div class="modal" id="loadingModal">
     <div class="modal-content" style="text-align:center; padding: 40px 20px;">
-      <div style="font-size: 2rem; margin-bottom: 12px;">🔍</div>
-      <div style="font-weight: 500;" id="loadingText">กำลังอ่านข้อความบนสลิปในเครื่อง...</div>
+      <div style="font-size: 2rem; margin-bottom: 12px;">☁️</div>
+      <div style="font-weight: 500;" id="loadingText">กำลังอ่านยอดเงินจากสลิป...</div>
     </div>
   </div>
 
@@ -303,4 +318,168 @@
         item.className = 'tx-item';
         const dateObj = new Date(t.date);
         const formattedDate = !isNaN(dateObj.getTime())
-          ? dateObj.toLocaleDateString('th
+          ? dateObj.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+          : 'วันที่ไม่ระบุ';
+
+        const amt = Number(t.amount) || 0;
+        item.innerHTML = `
+          <div class="tx-left">
+            <span class="tx-title">${t.category || 'ทั่วไป'} ${t.note ? '· ' + t.note : ''}</span>
+            <span class="tx-date">${formattedDate}</span>
+          </div>
+          <div class="tx-right">
+            <span class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '-'}฿${amt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</span>
+            <button class="btn-delete" onclick="deleteTransaction(${t.id})">🗑️</button>
+          </div>
+        `;
+        listEl.appendChild(item);
+      });
+    }
+
+    function openManualModal() {
+      document.getElementById('modalHeading').innerText = 'บันทึกรายการ';
+      document.getElementById('txType').value = 'expense';
+      document.getElementById('txAmount').value = '';
+      document.getElementById('txNote').value = '';
+      
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('txDate').value = now.toISOString().slice(0, 16);
+      
+      document.getElementById('entryModal').style.display = 'flex';
+    }
+
+    function saveTransaction() {
+      try {
+        const amtInput = document.getElementById('txAmount').value;
+        const amount = parseFloat(amtInput);
+        if (isNaN(amount) || amount <= 0) {
+          alert('กรุณาระบุจำนวนเงินให้ถูกต้อง');
+          return;
+        }
+
+        const dateVal = document.getElementById('txDate').value;
+        let finalDate = new Date().toISOString();
+        if (dateVal) {
+          const testDate = new Date(dateVal);
+          if (!isNaN(testDate.getTime())) {
+            finalDate = testDate.toISOString();
+          }
+        }
+
+        const newTx = {
+          id: Date.now(),
+          type: document.getElementById('txType').value || 'expense',
+          amount: amount,
+          category: document.getElementById('txCategory').value || 'อื่นๆ',
+          note: (document.getElementById('txNote').value || '').trim() || 'ไม่มีบันทึก',
+          date: finalDate
+        };
+
+        transactions.unshift(newTx);
+        localStorage.setItem('my_transactions', JSON.stringify(transactions));
+        
+        closeModal('entryModal');
+        setPeriod('month', document.getElementById('btn-month'));
+        alert('บันทึกเรียบร้อย: ฿' + amount.toLocaleString('th-TH'));
+      } catch (err) {
+        alert('บันทึกไม่สำเร็จ: ' + err.message);
+      }
+    }
+
+    function deleteTransaction(id) {
+      if (!confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) return;
+      transactions = transactions.filter(t => t.id !== id);
+      localStorage.setItem('my_transactions', JSON.stringify(transactions));
+      render();
+    }
+
+    function triggerSlipUpload() {
+      const apiKey = localStorage.getItem('ocrspace_api_key');
+      if (!apiKey) {
+        alert('กรุณากดที่ไอคอน ⚙️ ด้านบน เพื่อใส่ OCR.Space API Key ก่อนใช้งานครับ');
+        openSettings();
+        return;
+      }
+      document.getElementById('slipInput').click();
+    }
+
+    async function handleOCRSpaceUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      document.getElementById('loadingText').innerText = 'กำลังส่งไปอ่านยอดเงิน (ฟรี 500/วัน)...';
+      document.getElementById('loadingModal').style.display = 'flex';
+
+      try {
+        const apiKey = localStorage.getItem('ocrspace_api_key');
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('apikey', apiKey);
+        formData.append('language', 'tha');
+        formData.append('isOverlayRequired', 'false');
+
+        const res = await fetch('https://api.ocr.space/parse/image', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        if (data.IsErroredOnProcessing) {
+          throw new Error(data.ErrorMessage ? data.ErrorMessage[0] : 'OCR ประมวลผลล้มเหลว');
+        }
+
+        const parsedText = data.ParsedResults && data.ParsedResults[0] ? data.ParsedResults[0].ParsedText : '';
+
+        // ค้นหาตัวเลขยอดเงินจากข้อความในสลิป (หาตัวเลขที่มีทศนิยม 2 ตำแหน่ง)
+        let extractedAmount = '';
+        const moneyMatches = parsedText.match(/([0-9]{1,3}(,[0-9]{3})*(\.[0-9]{2}))/g);
+        if (moneyMatches && moneyMatches.length > 0) {
+          const cleanAmt = moneyMatches[0].replace(/,/g, '');
+          if (!isNaN(parseFloat(cleanAmt))) {
+            extractedAmount = parseFloat(cleanAmt);
+          }
+        }
+
+        // กรอกข้อมูลลงฟอร์ม
+        document.getElementById('modalHeading').innerText = 'ตรวจสอบข้อมูลจากสลิป';
+        document.getElementById('txType').value = 'expense';
+        document.getElementById('txAmount').value = extractedAmount || '';
+        document.getElementById('txCategory').value = 'อาหาร';
+        document.getElementById('txNote').value = 'สแกนผ่านสลิป';
+
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('txDate').value = now.toISOString().slice(0, 16);
+
+        closeModal('loadingModal');
+        document.getElementById('entryModal').style.display = 'flex';
+      } catch (err) {
+        closeModal('loadingModal');
+        alert('เกิดข้อผิดพลาด: ' + err.message);
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    function openSettings() {
+      document.getElementById('apiKeyInput').value = localStorage.getItem('ocrspace_api_key') || '';
+      document.getElementById('settingsModal').style.display = 'flex';
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      if (!key) return alert('กรุณากรอก API Key');
+      localStorage.setItem('ocrspace_api_key', key);
+      closeModal('settingsModal');
+      alert('บันทึก API Key เรียบร้อยแล้ว ใช้งานได้วันละ 500 ครั้งครับ');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+
+    init();
+  </script>
+</body>
+</html>
